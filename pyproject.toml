@@ -1,0 +1,26 @@
+[project]
+name = "calbox"
+version = "0.0.1"
+description = "Calibration sandbox"
+readme = "README.md"
+requires-python = ">= 3.11, < 3.13"
+dependencies = [ "dask", "distributed", "toolviper", "ipywidgets", "matplotlib", "numpy", "prettytable", "pycryptodome", "pytest", "pytest-cov", "pytest-html", "scikit_image", "scikit-learn", "scipy",  "xarray", "zarr", "bokeh", "jupyterlab",]
+
+[[project.authors]]
+name = "George Moellenbrock"
+email = "gmoellen@nrao.edu"
+
+name = "Joshua Hoskins"
+email = "jhoskins@nrao.edu"
+
+[[project.authors]]
+name = "Victor de Souza Magalhaes"
+email = "vdesouza@nrao.edu"
+
+[[project.authors]]
+name = "Neal Schweigart"
+email = "nschweig@nrao.edu"
+
+[project.license]
+file = "LICENSE.txt"
+

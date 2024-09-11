@@ -141,6 +141,12 @@ class VisJones(object):
         print(' '+
               'pars.shape='+str(self.pars.shape),
               'Jones.shape='+str(self.Jones.shape))
+
+    def __repr__(self):
+        outstr = 'VisJones summary:\n'
+        for key, val in self.__dict__.items():
+            outstr += f'{key} = {val}\n'
+        return outstr
         
         
     def plotSpec(self):
@@ -162,6 +168,7 @@ class VisJones(object):
             pl.xlabel('Channel')
             if iplt%4==1:
                 pl.ylabel('Cal Phase (deg)')
+        pl.show()
 
     def plotTime(self):
         pl.clf()
