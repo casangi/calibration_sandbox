@@ -1,8 +1,8 @@
-
-from enum import Enum,IntEnum
 import numpy as np
-import pylab as pl
+import matplotlib.pylab as pl
+
 from math import pi
+from enum import Enum,IntEnum
 
 # Ordered VE Enum
 class StandardVisEqTypeEnum(IntEnum):
@@ -356,17 +356,19 @@ class BJones(VisJones):
         
 
 class GJones(VisJones):
-    def __init__(self,verbose=VisJones.globverbose):
-        super().__init__(visEqType=StandardVisEqTypeEnum.G,
-                         calTypeName='GJones',
-                         parType=ParTypeEnum.COMPLEX,
-                         nPol=2,
-                         nPar=1,
-                         matType=MatTypeEnum.DIAGONAL,
-                         chanDepPar=False,
-                         chanDepMat=False,
-                         initparval=[1+0j],
-                         verbose=verbose)
+    def __init__(self, verbose=VisJones.globverbose):
+        super().__init__(
+            visEqType=StandardVisEqTypeEnum.G,
+            calTypeName='GJones',
+            parType=ParTypeEnum.COMPLEX,
+            nPol=2,
+            nPar=1,
+            matType=MatTypeEnum.DIAGONAL,
+            chanDepPar=False,
+            chanDepMat=False,
+            initparval=[1+0j],
+            verbose=verbose
+        )
 
     def simPar(self):
         self.initPar()
