@@ -1,8 +1,8 @@
-import numpy as np
-import matplotlib.pylab as pl
 
-from math import pi
 from enum import Enum,IntEnum
+import numpy as np
+import pylab as pl
+from math import pi
 
 # Ordered VE Enum
 class StandardVisEqTypeEnum(IntEnum):
@@ -295,10 +295,18 @@ class VisJones(object):
     def invertJones(self):
         self.Jones=np.linalg.inv(self.Jones)
 
-    # multiply this VJ by another (from the left)
-    def accumulate(self,other):
-        # this = other @ this
-        np.matmul(other.Jones,self.Jones,out=self.Jones)   # "in-place"
+    # Empty the Jones member
+    def clearJones(self):
+        self.Jones=np.array([])
+
+    # multiply this VJ by another "in-place"
+    def accumulate(self,other,fromRight=True):
+        if fromRight:
+            # this = this @ other
+            np.matmul(self.Jones,other.Jones,out=self.Jones)
+        else:
+            # this = other @ this
+            np.matmul(other.Jones,self.Jones,out=self.Jones)
 
     # apply this Jones rightward to specified V, indexed by 1st antenna
     def applyRight(self,visData,V):
@@ -356,19 +364,17 @@ class BJones(VisJones):
         
 
 class GJones(VisJones):
-    def __init__(self, verbose=VisJones.globverbose):
-        super().__init__(
-            visEqType=StandardVisEqTypeEnum.G,
-            calTypeName='GJones',
-            parType=ParTypeEnum.COMPLEX,
-            nPol=2,
-            nPar=1,
-            matType=MatTypeEnum.DIAGONAL,
-            chanDepPar=False,
-            chanDepMat=False,
-            initparval=[1+0j],
-            verbose=verbose
-        )
+    def __init__(self,verbose=VisJones.globverbose):
+        super().__init__(visEqType=StandardVisEqTypeEnum.G,
+                         calTypeName='GJones',
+                         parType=ParTypeEnum.COMPLEX,
+                         nPol=2,
+                         nPar=1,
+                         matType=MatTypeEnum.DIAGONAL,
+                         chanDepPar=False,
+                         chanDepMat=False,
+                         initparval=[1+0j],
+                         verbose=verbose)
 
     def simPar(self):
         self.initPar()
@@ -428,7 +434,7 @@ class JOrElJones(VisJones):
         self.pars=calcCheby(self.parShape,ax=2,
                             nC=4,
                             C=4*[0],          # relative to 0
-                            dC=[0]+3*[0.02])  # 
+                            dC=[0]+3*[0.02])  # relative to 0
                         
 
     def calcJones(self):
@@ -673,6 +679,7 @@ class VisData(object):
         if clear:
             pl.clf()
         corrname=['XX','XY','YX','YY']
+        print('Plotting '+str(V.shape[2])+' channels on '+str(V.shape[1])+' baselines...')
         Amax=pl.absolute(V).max()*1.05
         for ipol in range(4):
             iplt=ipol+1
@@ -802,8 +809,19 @@ class VisData(object):
 
         # pass to solve:
         print('Here we would pass this VisData to a solver for '+VisEq.solveVJ.calTypeName)
-        
 
+    # Form Stokes parameters from (for now) Linear Feed data
+    def Stokes(self,Vin):
+        # This assert isn't right, since one could pass Vin from a different VisData;
+        #  need a better interface for selecting data members....
+        assert (self.polBasis==PolBasisEnum.LINEAR), 'Pol Basis not linear!'
+        M=np.linalg.inv(np.array([1,1,0,0,0,0,1,1j,0,0,1,-1j,1,-1,0,0]).reshape((4,4))).reshape((1,1,1,4,4))
+        # convert to Stokes and average over time, baseline, channel axes
+        S=np.real(np.mean(np.matmul(M,Vin.reshape(Vin.shape+(1,))),(0,1,2,4)))
+
+        return S
+    
+        
 
 
 class VisEquation(object):
@@ -844,13 +862,10 @@ class VisEquation(object):
             for ivj in range(len(self.applyVJs)):
                 self.applyVJs[ivj].VEindex=ivj
         
-        # set up/downstream lists to whole list in proper order
+        # set up/downstream lists to whole list (same)
         #  (these now appropriate for full corrupt or full correct)
-        self.upstreamVJs=self.applyVJs[::-1]   # inward order (all) 
-        self.downstreamVJs=self.applyVJs       # outward order (all)
-
-        # Report the upstream list
-        #self.showCorruptVE()
+        self.upstreamVJs=self.applyVJs        
+        self.downstreamVJs=self.applyVJs      
 
     # arrange to solve for a VisJones
     def setSolve(self,solveVJ):
@@ -864,8 +879,9 @@ class VisEquation(object):
                 more = pivot < len(self.applyVJs)
             self.solvePivot=pivot
 
-            self.upstreamVJs=self.applyVJs[self.solvePivot:][::-1]   # inward order
-            self.downstreamVJs=self.applyVJs[0:self.solvePivot]      # outward order
+            self.upstreamVJs=self.applyVJs[self.solvePivot:]
+            self.downstreamVJs=self.applyVJs[0:self.solvePivot]
+
         else:
             self.solvePivot=-1
 
@@ -966,6 +982,77 @@ class VisEquation(object):
     def contractVE(self,visData,Vup,Vdown):
         self.corrupt(visData,Vup)
         self.correct(visData,Vdown)
+
+
+    # Traditional polarization refactor: B(G)J --> B'(G)D
+    #  While the polarizer (general J) and backend filter (diagonal B) separately operate on the 
+    #   incoming signal in a freq-dep way (i.e., both as a "bandpass" effect), practical calibration
+    #   heuristics have effectively refactored these terms so that the effective B calibration
+    #   contains both the backend filter's and polarizer's like-polarization (i.e., on-diagonal Jones)
+    #   effects in a single diagonal Jones matrix (NB: the diagonal factorization of J commutes with G).
+    #   Separately, the cross-polarization (i.e., off-diagonal) effects remain characterized by a
+    #   "D-term" (and typically, only if polarimetry is relevant) with ones on its diagonal.  Note
+    #   that the off-diagonal D-term elements are normalized by the on-diagonal elements of the
+    #   original polarizer's J matrix.
+    #
+    #    BJ = [Bp 0][Jpp Jpq] = [BpJpp  0][1  Jpq/Jpp] = [Bp'  0][1  Dpq]  = B'D
+    #         [0 Bq][Jqp Jqq]   [0  BqJqq][Jqp/Jqq  1]   [0  Bq'][Dqp  1]
+    def refactorPolTraditional(self,B,J):
+        Jagg=JJones(verbose=False)
+        Jagg.setParShape(B.nTimePar,B.nAntPar,B.nChanPar)
+        Jagg.initJones()
+        for ivj in [B,J]:
+            ivj.calcJones()
+            Jagg.accumulate(ivj)
+
+        # Extract Bout's pars from Jagg
+        Bout=BJones()
+        Bout.setParShape(B.nTimePar,B.nAntPar,B.nChanPar)
+        Bout.initPar()
+        Bout.pars=Jagg.Jones[:,:,:,[0,1],[0,1]].reshape((B.nTimePar,B.nAntPar,B.nChanPar,2,1))
+        Bout.calcJones()
+        Bout.invertJones()  # temporarily, to form Dout below
+
+        # Extract Dout's pars from Jagg
+        Dout=DJones()
+        Dout.setParShape(B.nTimePar,B.nAntPar,B.nChanPar)
+        Dout.initPar()
+        Dout.Jones=Jagg.Jones.copy()
+        Dout.accumulate(Bout,fromRight=False)
+        Dout.pars=Dout.Jones[:,:,:,[0,1],[1,0]].reshape((B.nTimePar,B.nAntPar,B.nChanPar,2,1))
+
+        # Clear Jones member; Users of Bout, Dout will have to redo calcJones (if needed)
+        Dout.clearJones()
+        Bout.clearJones()
+
+        return Bout,Dout
+
+    # Smirnov polarization refactor  B(G)J -> (G)J'
+    #  Smirnov (2010) proposes an ~economical refactoring of the standard and traditional Vis equation
+    #   into strictly time-dependent and strictly frequency-dependent parts:  Since backend filter, B,
+    #   and polarizer, J, are both frequency-dependent, it may be most efficient just to combine these
+    #   and solve for them as a single term (NB: B commutes with G)
+    #
+    #    BJ = [Bp 0][Jpp Jpq] = [BpJpp  BpJpq] = J'
+    #         [0 Bq][Jqp Jqq]   [BqJqp  BqJqq]
+    def refactorPolSmirnov(self,B,J):
+        Jout=JJones(verbose=False)
+        Jout.setParShape(B.nTimePar,B.nAntPar,B.nChanPar)
+        Jout.initPar()
+        Jout.initJones()
+        for ivj in [B,J]:
+            ivj.calcJones()
+            Jout.accumulate(ivj)
+
+            
+        Jout.pars[:,:,:,[0,0,1,1],[0,1,0,1]] = Jout.Jones[:,:,:,[0,0,1,1],[0,1,1,0]]
+        Jout.clearJones()
+
+        return Jout
+
+
+
+
 
 
 # ...
