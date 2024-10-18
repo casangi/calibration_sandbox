@@ -1,0 +1,47 @@
+[project]
+name = "calviper"
+version = "0.0.1"
+description = "Calibration Prototype using VIPER/RADPS frameworks"
+authors = [
+    {name = "Joshua Hoskins", email="jhoskins@nrao.edu"},
+]
+license = {file = "LICENSE.txt"}
+readme = "README.md"
+requires-python = ">= 3.9, < 3.13"
+
+dependencies = [
+    'cerberus',
+    'dask',
+    'dask_jobqueue',
+    'distributed',
+    'matplotlib',
+    'numba>=0.57.0',
+    'numpy',
+    'pytest',
+    'pytest-cov',
+    'pytest-html',
+    'rich',
+    'toolviper',
+    'tqdm',
+    'xarray',
+    'zarr',
+    'jupyterlab',
+    'xradio>=0.0.41'
+]
+
+
+[project.optional-dependencies]
+docs = [
+    'ipykernel',
+    'ipympl',
+    'ipython',
+    'jupyter-client',
+    'nbsphinx',
+    'recommonmark',
+    'scanpydoc',
+    'sphinx-autoapi',
+    'sphinx-autosummary-accessors',
+    'sphinx_rtd_theme',
+    'twine',
+    'pandoc'
+]
